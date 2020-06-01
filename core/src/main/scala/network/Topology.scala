@@ -6,8 +6,8 @@ import scalax.collection.edge.Implicits._
 import scalax.collection.edge.LUnDiEdge
 import scalax.collection.mutable.Graph
 
-class Port(val id: String, val node: Node) {
-
+class Port(val id: String, val node: Node, var peer: Port = null) {
+  override def toString: String = id
 }
 
 trait Node {
@@ -23,7 +23,16 @@ case class Switch(val id: String) extends Node {
   override var ports: Set[Port] = Set.empty
 }
 
-class Link(val p0: Port, val p1: Port, val bw: String)
+class Link(val p0: Port, val p1: Port, val bw: String) {
+  def getPortByNode(node: Node): Option[Port] = {
+    if (p0.node == node) {
+      return Some(p0)
+    } else if (p1.node == node) {
+      return Some(p1)
+    }
+    None
+  }
+}
 
 case class Topo2(hosts: Set[Host], switches: Set[Switch], links: Set[Link]) {
 
@@ -90,6 +99,8 @@ object Topology {
         for (link_info <- topo.links) {
           val p0 = allPorts.find(p => p.id == link_info(0)).orNull
           val p1 = allPorts.find(p => p.id == link_info(1)).orNull
+          p0.peer = p1
+          p1.peer = p0
           val link = new Link(p0, p1, link_info(2))
           addLink(p0.node, p1.node, link)
         }
@@ -121,21 +132,25 @@ object Topology {
     val p: Option[g.Path] = n(srcSw) shortestPathTo n(dstSw)
     p match {
       case Some(value) => {
-        toStandardPath(value, src, dst)
+        toStandardPath(value, getPortById(src).orNull, getPortById(dst).orNull)
       }
       case None => null
     }
   }
 
-  def toStandardPath(p: g.Path, src: String, dst: String): Path = {
+  def toStandardPath(p: g.Path, src: Port, dst: Port): Path = {
     val path = new Path
-    var pe: PathElement = new PathElement(getPortById(src).orNull, Set())
+    var pe: PathElement = new PathElement(src, Set())
     p.edges.foreach(e => e.toOuter.label match {
-      case l: Link => pe.egresses += l.p0
+      case l: Link => pe.egresses += l.getPortByNode(pe.ingress.node).orNull
         path.elements += pe
-        pe = new PathElement(l.p1, Set())
+        l.getPortByNode(pe.ingress.node) match {
+          case Some(ap) => pe = new PathElement(ap.peer, Set())
+          case _ => println("no such port")
+        }
+
     })
-    pe.egresses += getPortById(dst).orNull
+    pe.egresses += dst
     path.elements += pe
     path
   }

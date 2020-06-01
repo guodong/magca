@@ -23,7 +23,7 @@ lazy val core = (project in file("core")).settings(
 )
 
 lazy val apps = (project in file("apps")).settings(
-  scalacOptions += "-Ymacro-annotations",
+  scalacOptions ++= Seq("-Ymacro-annotations", "-Ymacro-debug-lite"),
   commonSettings,
 ).aggregate(core).dependsOn(core)
 

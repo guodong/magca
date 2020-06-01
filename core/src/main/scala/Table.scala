@@ -75,6 +75,10 @@ class Table {
     table
   }
 
+  def rewrite(): Unit = {
+
+  }
+
   def distinct(): Unit = {
     var result: Set[Entry] = Set.empty
     for (e <- entries) {

@@ -3,6 +3,7 @@ package network
 class PathElement(val ingress: Port, var egresses: Set[Port], val fwdIndicator: String = "all")
 
 class Path {
+  var nm: String = "path"
   var elements: Set[PathElement] = Set.empty
 
   def isTraverse(sw: String): Boolean = {
@@ -19,4 +20,8 @@ class Path {
     false
   }
 
+  override def toString: String = {
+    elements.map(e => s"${e.ingress} -> (${e.egresses.mkString(", ")})").mkString(", ")
+    nm
+  }
 }

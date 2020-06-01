@@ -8,6 +8,99 @@ import scala.collection.mutable.ArrayBuffer
 object IR {
   val variables: ArrayBuffer[BaseVariable] = new ArrayBuffer[BaseVariable]()
   val instructions: ArrayBuffer[Instruction] = new ArrayBuffer[Instruction]()
+  val insts: ArrayBuffer[Inst] = new ArrayBuffer[Inst]()
+
+  def dumpInsts(): Unit = {
+    insts.foreach(println(_))
+  }
+
+  def tabulationInst(): Unit = {
+    insts.foreach(i => i.tabulation())
+  }
+  def dumpTablesInst(): Unit = {
+    insts.foreach(i => i.table.dump())
+  }
+  var dfgInst: Graph[Inst, DiEdge] = Graph()
+
+  def genDFGInst(): Unit = {
+    def getNode(v: BaseVariable): Inst = {
+      val n = dfgInst.nodes.find(n => n.toOuter.output == v)
+      n match {
+        case Some(x) => x.toOuter
+        case None => null
+      }
+    }
+
+    insts.foreach(i => dfgInst.add(i))
+
+    for (inst <- insts) {
+      if (inst.gv != null) {
+        val src = getNode(inst.gv)
+        if (src != null)
+          dfgInst.add(src ~> inst)
+      }
+
+      for (input <- inst.inputs) {
+        val src = getNode(input)
+        if (src != null)
+          dfgInst.add(src ~> inst)
+      }
+    }
+  }
+
+  def exploreInst(): Unit = {
+
+    dfgInst.topologicalSort() match {
+      case Right(topOrder) => {
+        for (node <- topOrder) {
+          val inst = node.toOuter
+          if (node.diPredecessors.size == 0) {
+            inst.table_sigma = inst.table
+          } else {
+            var tbs = new ArrayBuffer[Table]()
+            for (p <- node.diPredecessors) {
+              tbs += p.toOuter.table_sigma
+            }
+            if (false) { // (inst.op == "shortestPath" || inst.op == "stp") {
+              val b_sigma_t = tbs.reduce((t1, t2) => t1.join(t2))
+              val input_sigma_t = b_sigma_t.project(node.toOuter.table.attributes)
+              input_sigma_t.dump()
+            } else {
+              tbs += node.toOuter.table
+              val sigma_t = tbs.reduce((t1, t2) => t1.join(t2))
+              inst.table_sigma = sigma_t
+              if (inst.isUdf) {
+                for (e <- inst.table_sigma.entries) {
+                    // set output attribute to execution result
+                  inst match {
+                    case x: UdfInst1[Any,_] =>
+                      e.data = e.data.updated(x.output, x.f(e.data(x.inputs(0))))
+                    case x: UdfInst2[Any, Any, _] =>
+                      e.data = e.data.updated(x.output, x.f(e.data(x.inputs(0)), e.data(x.inputs(1))))
+                  }
+                }
+              }
+              inst match {
+                case x: SysInst if x.op == "phi" =>
+                  for (e <- inst.table_sigma.entries) {
+                    if (e.data(inst.inputs(0)) == "1") {
+                      e.data = e.data.updated(inst.output, e.data(inst.inputs(1)))
+                    } else {
+                      e.data = e.data.updated(inst.output, e.data(inst.inputs(2)))
+                    }
+                  }
+                case _ => Nil
+              }
+
+
+              inst.table_sigma.dump()
+            }
+          }
+        }
+      }
+      case Left(cycleNode) => throw new Error(s"Graph contains a cycle at node: ${cycleNode}.")
+    }
+  }
 
   var dfg: Graph[Instruction, DiEdge] = Graph()
 
